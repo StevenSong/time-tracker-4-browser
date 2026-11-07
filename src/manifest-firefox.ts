@@ -15,10 +15,19 @@ import packageJson from "../package.json"
 
 const { version, author: { name: authorName }, homepage } = packageJson
 
+/**
+ * Personal build, signed separately from the official listing on addons.mozilla.org
+ */
+const GECKO_ID = 'tt4b@stevensong'
+/**
+ * Appended to the upstream version. One version can only be signed once, so bump it before signing again
+ */
+const FORK_REVISION = 1
+
 const _default: browser._manifest.WebExtensionManifest = {
     name: '__MSG_meta_marketName__',
     description: "__MSG_meta_description__",
-    version,
+    version: `${version}.${FORK_REVISION}`,
     author: authorName,
     default_locale: 'en',
     homepage_url: homepage,
@@ -61,7 +70,7 @@ const _default: browser._manifest.WebExtensionManifest = {
     },
     browser_specific_settings: {
         gecko: {
-            id: '{a8cf72f7-09b7-4cd4-9aaa-7a023bf09916}',
+            id: GECKO_ID,
             data_collection_permissions: {
                 required: ['none'],
                 optional: ['technicalAndInteraction'],

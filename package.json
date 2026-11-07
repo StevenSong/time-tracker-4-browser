@@ -13,6 +13,8 @@
         "analyze": "rspack --config=rspack/rspack.analyze.ts",
         "build": "rspack --config=rspack/rspack.prod.ts",
         "build:firefox": "rspack --config=rspack/rspack.prod.firefox.ts",
+        "lint:firefox": "web-ext lint --source-dir dist_prod_firefox",
+        "sign:firefox": "web-ext sign --source-dir dist_prod_firefox --channel unlisted",
         "build:safari": "rspack --config=rspack/rspack.prod.safari.ts",
         "test": "rstest --config test/rstest.config.mts",
         "test-c": "rstest --config test/rstest.config.mts --coverage --reporter=junit",
@@ -58,7 +60,8 @@
         "ts-checker-rspack-plugin": "^1.7.2",
         "tsx": "^4.23.15",
         "typescript": "7.0.2",
-        "unplugin-element-plus": "^0.11.2"
+        "unplugin-element-plus": "^0.11.2",
+        "web-ext": "^10.8.0"
     },
     "dependencies": {
         "@element-plus/icons-vue": "^2.3.2",

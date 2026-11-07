@@ -54,6 +54,20 @@ export function matchCond(cond: string[], url: string): string[] {
     return matchedNormalRules
 }
 
+/**
+ * Identifies which per-visit rules apply to a URL.
+ *
+ * Navigating between URLs with the same key (e.g. from one YouTube Short to the next) continues the current visit,
+ * while navigating to a URL with a different key starts a new one.
+ *
+ * @param rules rules matching the URL
+ */
+export const visitScopeKey = (rules: Pick<tt4b.limit.Rule, 'id' | 'visitTime'>[]): string => rules
+    .filter(({ visitTime }) => !!visitTime)
+    .map(({ id }) => id)
+    .sort((a, b) => a - b)
+    .join(',')
+
 export const meetLimit = (limit: number | undefined, value: number | undefined): boolean => {
     return !!limit && !!value && value > limit
 }

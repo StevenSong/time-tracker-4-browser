@@ -1,7 +1,7 @@
 import { rstest } from '@rstest/core'
 import {
     dateMinute2Idx, hasLimited, hasWeeklyLimited, isEffective, isInPeriod, matchCond, matches, meetLimit,
-    meetTimeLimit,
+    meetTimeLimit, visitScopeKey,
 } from "@util/limit"
 
 describe('util/limit', () => {
@@ -159,5 +159,17 @@ describe('util/limit', () => {
         expect(isInPeriod(150, [100, 0])).toBe(true)
         expect(isInPeriod(150, [150, 0])).toBe(true)
         expect(isInPeriod(0, [150, 0])).toBe(true)
+    })
+
+    test('visitScopeKey', () => {
+        // Only rules with per-visit limit count, and the order doesn't matter
+        expect(visitScopeKey([{ id: 3, visitTime: 60 }, { id: 1, visitTime: 30 }, { id: 2 }]))
+            .toBe(visitScopeKey([{ id: 1, visitTime: 30 }, { id: 3, visitTime: 60 }]))
+        expect(visitScopeKey([{ id: 2, visitTime: 0 }])).toBe(visitScopeKey([]))
+        // Different per-visit rules means a different visit
+        expect(visitScopeKey([{ id: 1, visitTime: 30 }])).not.toBe(visitScopeKey([]))
+        expect(visitScopeKey([{ id: 1, visitTime: 30 }]))
+            .not.toBe(visitScopeKey([{ id: 1, visitTime: 30 }, { id: 2, visitTime: 30 }]))
+        expect(visitScopeKey([{ id: 1, visitTime: 30 }])).not.toBe(visitScopeKey([{ id: 11, visitTime: 30 }]))
     })
 })

@@ -1,8 +1,9 @@
 import { trySendMsg2Runtime } from '@api/sw/common'
 import locationWatcher from '@cs/location-watcher'
 import NormalTracker from "@cs/tracker/normal"
-import { calcRealLimit, meetLimit } from '@util/limit'
+import { calcRealLimit, meetLimit, visitScopeKey } from '@util/limit'
 import { MILL_PER_SECOND } from "@util/time"
+import { isSameReason } from '../common'
 import DelayCoordinator from '../manager/delay-coordinator'
 import LimitState from '../manager/state'
 import type { LimitReason, Processor, SharedOption, VisitData } from '../types'
@@ -13,7 +14,15 @@ class VisitProcessor implements Processor, VisitData {
     #tracker: NormalTracker
     #delayCount: number = 0
     #listeners: ArgCallback<number>[] = []
-    #lastUrl: string
+    /**
+     * The URL which {@link #rules} were loaded for
+     */
+    #rulesUrl: string
+    /**
+     * Key of the per-visit rules matching {@link #rulesUrl}
+     */
+    #scopeKey: string | undefined
+    #resetSeq: number = 0
 
     get mills() {
         return this.#mills
@@ -28,20 +37,10 @@ class VisitProcessor implements Processor, VisitData {
         private readonly delayCoord: DelayCoordinator,
         private readonly option: SharedOption,
     ) {
-        this.#lastUrl = locationWatcher.url
+        this.#rulesUrl = locationWatcher.url
         this.#tracker = new NormalTracker({
             onReport: data => this.handleTracker(data),
         })
-        locationWatcher.onCurrChange(() => {
-            const newUrl = locationWatcher.url
-            if (this.#lastUrl === newUrl) return
-            this.#lastUrl = newUrl
-            // reset focus time and delay count when url changed
-            this.#mills = 0
-            this.#delayCount = 0
-            this.#notify()
-        })
-        locationWatcher.onCurrChange(() => void this.reset())
     }
 
     onChange(listener: ArgCallback<number>) {
@@ -69,6 +68,12 @@ class VisitProcessor implements Processor, VisitData {
         this.#mills += diff
         if (locationWatcher.isWhite) return
         this.#notify()
+        // Rules of the new URL are still loading
+        if (locationWatcher.url !== this.#rulesUrl) return
+        this.state.add(...this.#limitedReasons())
+    }
+
+    #limitedReasons(): LimitReason[] {
         const reasons: LimitReason[] = []
         this.#rules.forEach(rule => {
             if (!this.hasLimited(rule)) return
@@ -81,7 +86,7 @@ class VisitProcessor implements Processor, VisitData {
                 delayCount: this.#delayCount,
             })
         })
-        this.state.add(...reasons)
+        return reasons
     }
 
     async init(): Promise<void> {
@@ -94,12 +99,34 @@ class VisitProcessor implements Processor, VisitData {
         await this.reset()
     }
 
+    /**
+     * Reload rules, called when the URL or rules changed.
+     *
+     * The visit continues while the URL keeps matching the same per-visit rules,
+     * e.g. scrolling from one short video to the next, and restarts once it doesn't.
+     */
     async reset() {
-        this.#rules = []
-        this.state.removeByType('VISIT')
-        if (locationWatcher.isWhite) return
+        const seq = ++this.#resetSeq
+        const { url, isWhite } = locationWatcher
+        const rules = isWhite ? [] : await trySendMsg2Runtime('limit.list', { effective: true, url }) ?? []
+        // Discard the outdated response
+        if (seq !== this.#resetSeq) return
 
-        this.#rules = await trySendMsg2Runtime('limit.list', { effective: true, url: locationWatcher.url }) ?? []
+        const scopeKey = visitScopeKey(rules)
+        if (url !== this.#rulesUrl && scopeKey !== this.#scopeKey) {
+            this.#mills = 0
+            this.#delayCount = 0
+            this.#notify()
+        }
+        this.#rulesUrl = url
+        this.#scopeKey = scopeKey
+        this.#rules = rules
+
+        // Keep the reasons still hit, so the modal doesn't flicker when moving within a limited visit
+        const reasons = isWhite ? [] : this.#limitedReasons()
+        const stale = this.state.reasons.filter(r => r.type === 'VISIT' && !reasons.some(n => isSameReason(r, n)))
+        this.state.remove(...stale)
+        this.state.add(...reasons)
     }
 }
 
